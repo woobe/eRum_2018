@@ -1,0 +1,253 @@
+---
+title: "Classification Example: Diabetes"
+author: "Jo-fai (Joe) Chow - joe@h2o.ai"
+date: "H2O + LIME Workshop at eRum 2018"
+output: 
+  html_document: 
+    df_print: kable
+    fig_height: 10
+    fig_width: 14
+    highlight: tango
+    number_sections: yes
+    theme: spacelab
+    toc: yes
+    toc_depth: 2
+---
+
+<br>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Get Ready
+
+```{r, message=FALSE}
+# Libraries
+library(h2o) # for H2O Machine Learning
+library(lime) # for Machine Learning Interpretation
+library(mlbench) # for Datasets
+```
+
+```{r}
+# Your lucky seed here ...
+n_seed = 12345
+```
+
+<br>
+
+# Data Prep - Pima Indians Diabetes
+
+```{r}
+data("PimaIndiansDiabetes")
+dim(PimaIndiansDiabetes)
+head(PimaIndiansDiabetes)
+```
+
+<br>
+
+## Define Target and Features
+
+```{r}
+target = "diabetes" # Median House Value
+features = setdiff(colnames(PimaIndiansDiabetes), target)
+print(features)
+```
+
+<br>
+
+## Convert R dataframe into H2O dataframe (JVM)
+
+```{r}
+# Start a local H2O cluster (JVM)
+h2o.init()
+h2o.no_progress() # disable progress bar for RMarkdown
+```
+
+```{r}
+# H2O dataframe
+h_diabetes = as.h2o(PimaIndiansDiabetes)
+head(PimaIndiansDiabetes)
+```
+
+```{r}
+# Split Train/Test
+h_split = h2o.splitFrame(h_diabetes, ratios = 0.75, seed = n_seed)
+h_train = h_split[[1]] # 75% for modelling
+h_test = h_split[[2]] # 25% for evaluation
+```
+
+<br>
+
+# Build H2O Models
+
+<br>
+
+## Single Model - Default H2O GBM
+
+```{r}
+# Train a Default H2O GBM model
+model_gbm = h2o.gbm(x = features,
+                    y = target,
+                    training_frame = h_train,
+                    model_id = "my_gbm",
+                    seed = n_seed)
+print(model_gbm)
+```
+
+<br>
+
+## Evaluate Single Model
+
+```{r}
+# Evaluate performance on test
+h2o.performance(model_gbm, newdata = h_test)
+```
+
+<br>
+
+## H2O AutoML: Multiple H2O Models + Stacked Ensemble
+
+```{r}
+# Train multiple H2O models with H2O AutoML
+# Stacked Ensembles will be created from those H2O models
+# You tell H2O ...
+#     1) how much time you have and/or 
+#     2) how many models do you want
+# Note: H2O deep learning algo on multi-core is stochastic
+model_automl = h2o.automl(x = features,
+                          y = target,
+                          training_frame = h_train,
+                          nfolds = 5,               # Cross-Validation
+                          max_runtime_secs = 120,   # Max time
+                          max_models = 100,         # Max no. of models
+                          stopping_metric = "AUC", # Metric to optimize
+                          project_name = "my_automl",
+                          exclude_algos = NULL,     # If you want to exclude any algo 
+                          seed = n_seed)
+```
+
+<br>
+
+## AutoML Leaderboard
+
+```{r}
+model_automl@leaderboard
+```
+
+<br>
+
+## Best Model (Single / Stacked Ensemble)
+
+```{r}
+# H2O: Model Leader
+# Best Model (either an individual model or a stacked ensemble)
+model_automl@leader
+```
+
+<br>
+
+## Evaluate Performance
+
+```{r}
+# Default GBM Model
+h2o.auc(h2o.performance(model_gbm, newdata = h_test))
+```
+
+```{r}
+# Best model from AutoML
+h2o.auc(h2o.performance(model_automl@leader, newdata = h_test)) # higher AUC = better
+```
+
+<br>
+
+## Make Predictions (Optional)
+
+```{r}
+yhat_test = h2o.predict(model_automl@leader, h_test)
+head(yhat_test)
+```
+
+<br>
+
+## Export Models (Optional)
+
+- Use `h2o.saveModel()` to save model to disk
+- Use `h2o.loadModel()` to re-load model
+- Also see `h2o.download_mojo()` and `h2o.download_pojo()`
+
+```{r, eval=FALSE}
+# Save model to disk
+h2o.saveModel(object = model_automl@leader, 
+              path = "./models/",
+              force = TRUE)
+```
+
+<br>
+
+# Explain the Model
+
+<br>
+
+## Step 1: Create an `explainer`
+
+```{r}
+explainer = lime::lime(x = as.data.frame(h_train[, features]),
+                       model = model_automl@leader)
+```
+
+<br>
+
+## Step 2: Turn `explainer` into `explanations`
+
+```{r}
+# Extract one sample (change `2` to any row you want)
+d_samp = as.data.frame(h_test[2, features])
+```
+
+```{r}
+# Assign a specifc row name (for better visualization)
+row.names(d_samp) = "Sample 2" 
+```
+
+```{r}
+# Create explanations
+explanations = lime::explain(x = d_samp,
+                             explainer = explainer,
+                             n_permutations = 5000,
+                             feature_select = "auto",
+                             n_labels = 1,    # Binary classification
+                             n_features = 13) # Look top x features
+```
+
+<br>
+
+## Look at Explanations (Bar Chart)
+
+```{r}
+lime::plot_features(explanations, ncol = 1)
+```
+
+<br>
+
+## Look at Explanations (Full Table)
+
+```{r}
+# Sort explanations by feature weight
+explanations = 
+  explanations[order(explanations$feature_weight, decreasing = TRUE),]
+```
+
+```{r}
+# Print Table
+print(explanations)
+```
+
+<br>
+
+# Try it Yourself
+
+Replace `PimaIndiansDiabetes` with your own data. Good luck!
+
+<br>
+
