@@ -1,7 +1,7 @@
 ---
 title: "Regression Example: Boston Housing"
 author: "Jo-fai (Joe) Chow - joe@h2o.ai"
-date: "H2O + LIME Workshop at eRum 2018"
+date: "H2O + LIME Workshop at eRum 2018 (Updated for MilanoR Workshop)"
 output: 
   html_document: 
     df_print: kable
@@ -62,6 +62,7 @@ print(features)
 # Start a local H2O cluster (JVM)
 h2o.init()
 h2o.no_progress() # disable progress bar for RMarkdown
+h2o.removeAll()   # Optional: remove anything from previous session 
 ```
 
 ```{r}
@@ -90,7 +91,7 @@ h_test = h_split[[2]] # 25% for evaluation
 model_gbm = h2o.gbm(x = features,
                     y = target,
                     training_frame = h_train,
-                    model_id = "my_gbm",
+                    model_id = "gbm_default_reg",
                     seed = n_seed)
 print(model_gbm)
 ```
@@ -122,7 +123,7 @@ model_automl = h2o.automl(x = features,
                           max_runtime_secs = 120,   # Max time
                           max_models = 100,         # Max no. of models
                           stopping_metric = "RMSE", # Metric to optimize
-                          project_name = "my_automl",
+                          project_name = "automl_reg",
                           exclude_algos = NULL,     # If you want to exclude any algo 
                           seed = n_seed)
 ```
@@ -250,5 +251,10 @@ Replace `BostonHousing` with your own data. Good luck!
 
 <br>
 
+# Session Info
 
+```{r}
+sessionInfo()
+```
 
+<br>
